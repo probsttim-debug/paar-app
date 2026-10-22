@@ -22,6 +22,7 @@ const PATHS = {
   plane: '<path d="M10.5 13.5 3 11l1.5-1.5 8 .5 4-4.5a2 2 0 0 1 3 3l-4.5 4 .5 8L14 22l-2.5-7.5L8 18v2.5L6.5 22l-1-3.5L2 17.5 3.5 16H6l3.5-3.5"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="M3 3l18 18M10.6 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.9 0 3.5-.6 4.9-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
   star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/>',
 };
 
@@ -71,11 +72,19 @@ export function openSheet({ title, body, onMount, onClose }) {
     </div>`;
   document.body.append(dlg);
 
-  const close = () => dlg.close();
-  dlg.addEventListener('close', () => {
+  // Direkt entfernen statt auf das „close"-Ereignis zu warten (kommt in manchen Browsern verzögert)
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
     dlg.remove();
     onClose?.();
-  });
+  };
+  const close = () => {
+    if (dlg.open) dlg.close();
+    finish();
+  };
+  dlg.addEventListener('close', finish); // z. B. Escape-Taste
   // Tippen auf den abgedunkelten Hintergrund schließt
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg || e.target.closest('[data-sheet-close]')) close();

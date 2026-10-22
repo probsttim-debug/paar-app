@@ -16,8 +16,8 @@ export function createSampleData(ME, PARTNER) {
   const events = [
     // Diese Woche
     { id: 'e1', type: 'busy', owner: ME, title: 'Spätschicht', start: w(0), time: '14:00' },
-    { id: 'e2', type: 'busy', owner: PARTNER, title: 'Yoga', start: w(1), time: '18:30' },
-    { id: 'e3', type: 'busy', owner: ME, title: 'Fußballtraining', start: w(2), time: '19:00' },
+    { id: 'e2', type: 'busy', owner: PARTNER, title: 'Yoga', start: w(-7), time: '18:30', repeat: { weekdays: [0] }, skip: [] },
+    { id: 'e3', type: 'busy', owner: ME, title: 'Training', start: w(-7), time: '19:00', repeat: { weekdays: [1, 3] }, skip: [] },
     { id: 'e4', type: 'busy', owner: PARTNER, title: 'Spieleabend', start: w(2), time: '19:30' },
     { id: 'e5', type: 'busy', owner: PARTNER, title: 'Arbeit bis spät', start: w(3) },
     { id: 'e6', type: 'date', title: 'Kino', start: w(4), time: '20:00', place: 'Kino am Markt', note: 'Tickets sind schon gekauft' },

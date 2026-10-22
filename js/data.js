@@ -412,10 +412,40 @@ export async function addEvent(data) {
     createdBy: uid,
     createdAt: nowISO(),
   };
-  if (ev.type === 'busy') ev.owner = uid;
+  if (ev.type === 'busy') {
+    ev.owner = uid;
+    // Feste Termine: jede Woche an bestimmten Wochentagen (0 = Mo … 6 = So)
+    if (data.repeat?.weekdays?.length) {
+      ev.repeat = { weekdays: [...new Set(data.repeat.weekdays)].sort((a, b) => a - b) };
+      if (data.repeat.until) ev.repeat.until = data.repeat.until;
+      ev.skip = [];
+      delete ev.end;
+    }
+  }
   state.events.push(ev);
   commit('events');
   return ev.id;
+}
+
+/** Eintrag löschen (bei festen Terminen die ganze Serie). Verknüpfte Date-Idee wird gelöst. */
+export async function deleteEvent(id) {
+  state.events = state.events.filter((e) => e.id !== id);
+  let ideasChanged = false;
+  for (const idea of state.ideas) {
+    if (idea.eventId === id) {
+      delete idea.eventId;
+      ideasChanged = true;
+    }
+  }
+  commit('events', ...(ideasChanged ? ['ideas'] : []));
+}
+
+/** Einen einzelnen Tag eines festen Termins auslassen (z. B. Training fällt aus). */
+export async function skipOccurrence(id, iso) {
+  const ev = state.events.find((e) => e.id === id);
+  if (!ev?.repeat) return;
+  ev.skip = [...new Set([...(ev.skip || []), iso])];
+  commit('events');
 }
 
 // ---------- To-dos ----------

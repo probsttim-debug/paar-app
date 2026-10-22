@@ -34,16 +34,17 @@ export function bindInvite(container, getCode) {
 }
 
 export const TYPE_LABEL = { date: 'Date', trip: 'Urlaub', other: 'Gemeinsam', busy: 'Verplant' };
-const TYPE_ICON = { date: 'heart', trip: 'plane', other: 'star', busy: 'clock' };
+export const TYPE_ICON = { date: 'heart', trip: 'plane', other: 'star', busy: 'clock' };
 
-/** Eine Zeile für einen gemeinsamen Termin (Start und Kalender). */
-export function eventRow(ev) {
+/** Eine Zeile für einen gemeinsamen Termin (Start und Kalender). Mit tappable=true öffnet sie die Details. */
+export function eventRow(ev, tappable = false) {
   const d = parseISO(ev.start);
   const meta = [fmtRange(ev.start, ev.end), ev.time, ev.place].filter(Boolean).map(esc).join(' · ');
   const startsIn = diffDays(today(), d);
   const when = startsIn < 0 ? 'läuft' : inDays(startsIn);
   return `
     <li class="event-row event-row--${ev.type}">
+      ${tappable ? `<button type="button" class="row-hit" data-event="${ev.id}" data-day="${ev.start}" aria-label="${esc(ev.title)}: Details"></button>` : ''}
       <span class="datebadge" aria-hidden="true"><small>${WEEKDAYS_SHORT[weekdayIndex(d)]}</small><strong>${d.getDate()}</strong></span>
       <span class="event-row__text">
         <strong>${esc(ev.title)}</strong>
@@ -55,7 +56,8 @@ export function eventRow(ev) {
 
 /**
  * Bottom-Sheet zum Eintragen: Date, Urlaub, Sonstiges gemeinsam oder „Ich bin verplant".
- * preset: Vorbelegung (z. B. aus einer Date-Idee), onSave(data) speichert.
+ * „Ich bin verplant" kann einmalig sein oder jede Woche an bestimmten Wochentagen.
+ * preset: Vorbelegung (z. B. aus einer Date-Idee, repeat: 'weekly'), onSave(data) speichert.
  */
 export function openEventForm({ heading = 'Neuer Eintrag', preset = {}, onSave }) {
   const p = { type: 'date', start: todayISO(), ...preset };
@@ -78,13 +80,26 @@ export function openEventForm({ heading = 'Neuer Eintrag', preset = {}, onSave }
             </label>`).join('')}
         </div>
       </fieldset>
+
+      <fieldset class="field" data-el="repeat-field">
+        <legend class="label">Wie oft?</legend>
+        <div class="seg seg--compact" role="group">
+          <button type="button" data-repeat="once">Einmalig</button>
+          <button type="button" data-repeat="weekly">${icon('repeat', 18)} Jede Woche</button>
+        </div>
+        <div class="weekday-picker" data-el="weekdays" role="group" aria-label="Wochentage">
+          ${WEEKDAYS_SHORT.map((d, i) => `
+            <label class="weekday-opt"><input type="checkbox" name="weekday" value="${i}"><span>${d}</span></label>`).join('')}
+        </div>
+      </fieldset>
+
       <label class="field">
         <span class="label" data-title-label>Titel</span>
         <input class="input" name="title" maxlength="80" autocomplete="off" value="${esc(p.title || '')}">
       </label>
       <div class="field-row">
-        <label class="field"><span class="label">Von</span><input class="input" type="date" name="start" value="${esc(p.start)}" required></label>
-        <label class="field"><span class="label">Bis (optional)</span><input class="input" type="date" name="end" value="${esc(p.end || '')}"></label>
+        <label class="field"><span class="label" data-start-label>Von</span><input class="input" type="date" name="start" value="${esc(p.start)}" required></label>
+        <label class="field"><span class="label" data-end-label>Bis (optional)</span><input class="input" type="date" name="end" value="${esc(p.end || '')}"></label>
       </div>
       <div class="field-row">
         <label class="field"><span class="label">Uhrzeit</span><input class="input" type="time" name="time" value="${esc(p.time || '')}"></label>
@@ -100,29 +115,60 @@ export function openEventForm({ heading = 'Neuer Eintrag', preset = {}, onSave }
     body,
     onMount(dlg, close) {
       const form = dlg.querySelector('form');
-      const titleInput = form.elements.title;
-      const titleLabel = form.querySelector('[data-title-label]');
-      const error = form.querySelector('.form-error');
+      const q = (sel) => form.querySelector(sel);
+      const error = q('.form-error');
+      let repeat = p.repeat === 'weekly' ? 'weekly' : 'once';
 
-      const syncType = () => {
+      const weekdayBoxes = () => [...form.querySelectorAll('input[name="weekday"]')];
+      const startWeekday = () => (form.elements.start.value ? weekdayIndex(parseISO(form.elements.start.value)) : 0);
+
+      const sync = () => {
         const busy = form.elements.type.value === 'busy';
-        titleLabel.textContent = busy ? 'Was hast du vor? (optional)' : 'Titel';
-        titleInput.placeholder = busy ? 'z. B. Arbeit, Training' : 'z. B. Kino, Essen gehen';
+        const weekly = busy && repeat === 'weekly';
+        q('[data-el="repeat-field"]').hidden = !busy;
+        q('[data-el="weekdays"]').hidden = !weekly;
+        form.querySelectorAll('[data-repeat]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.repeat === repeat)));
+        q('[data-title-label]').textContent = busy ? `Was hast du vor?${weekly ? '' : ' (optional)'}` : 'Titel';
+        form.elements.title.placeholder = busy ? (weekly ? 'z. B. Training, Chor' : 'z. B. Arbeit, Arzt') : 'z. B. Kino, Essen gehen';
+        q('[data-start-label]').textContent = weekly ? 'Ab' : 'Von';
+        q('[data-end-label]').textContent = weekly ? 'Endet am (optional)' : 'Bis (optional)';
+        // Beim Umschalten auf „Jede Woche" den Wochentag des Datums vorwählen
+        if (weekly && !weekdayBoxes().some((b) => b.checked)) weekdayBoxes()[startWeekday()].checked = true;
       };
-      form.addEventListener('change', (e) => e.target.name === 'type' && syncType());
-      syncType();
+
+      form.addEventListener('change', (e) => (e.target.name === 'type' || e.target.name === 'start') && sync());
+      form.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-repeat]');
+        if (!btn) return;
+        repeat = btn.dataset.repeat;
+        sync();
+      });
+      sync();
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const data = Object.fromEntries(new FormData(form));
+        const fd = new FormData(form);
+        const data = Object.fromEntries(fd);
+        const busy = data.type === 'busy';
+        const weekly = busy && repeat === 'weekly';
         const fail = (msg) => {
           error.textContent = msg;
           error.hidden = false;
         };
-        if (data.type !== 'busy' && !data.title.trim()) return fail('Bitte gib einen Titel ein.');
+        delete data.weekday;
+        if (!busy && !data.title.trim()) return fail('Bitte gib einen Titel ein.');
+        if (weekly && !data.title.trim()) return fail('Bitte schreib dazu, was du jede Woche vorhast.');
         if (!data.start) return fail('Bitte wähle ein Datum.');
-        if (data.end && data.end < data.start) return fail('„Bis“ darf nicht vor „Von“ liegen.');
-        if (data.type === 'busy' && !data.title.trim()) data.title = 'Verplant';
+        if (data.end && data.end < data.start) {
+          return fail(weekly ? '„Endet am“ darf nicht vor „Ab“ liegen.' : '„Bis“ darf nicht vor „Von“ liegen.');
+        }
+        if (weekly) {
+          const weekdays = fd.getAll('weekday').map(Number);
+          if (!weekdays.length) return fail('Bitte wähle mindestens einen Wochentag.');
+          data.repeat = { weekdays, until: data.end || undefined };
+          delete data.end;
+        }
+        if (busy && !data.title.trim()) data.title = 'Verplant';
         await onSave(data);
         close();
       });

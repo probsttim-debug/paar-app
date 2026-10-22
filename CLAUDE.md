@@ -18,7 +18,7 @@ Private Web-App für zwei Personen (mich und meine Freundin): gemeinsamer Kalend
 - `users/{uid}`: `coupleId` – zu welchem Paar die Person gehört (nur für sie selbst lesbar)
 - `couples/{coupleId}`: `members` (2 UIDs), `names`, `startDate` (Beginn der Beziehung), `createdAt`
 - `couples/{coupleId}/meta/photo`: `dataUrl` (Hintergrundbild, siehe unten), `updatedAt`
-- `couples/{coupleId}/events/{id}`: `type` (`date` | `trip` | `other` | `busy`), `title`, `start`, `end`, `time`, `place`, `note`, `owner` (nur bei `busy`: UID der verplanten Person), `ideaId` (optional)
+- `couples/{coupleId}/events/{id}`: `type` (`date` | `trip` | `other` | `busy`), `title`, `start`, `end`, `time`, `place`, `note`, `owner` (nur bei `busy`: UID der verplanten Person), `ideaId` (optional), `repeat` (optional, nur bei `busy`: `{ weekdays: [0–6, 0 = Mo], until? }` – fester Termin jede Woche), `skip` (ausgelassene Tage einer Serie, `YYYY-MM-DD`)
 - `couples/{coupleId}/todos/{id}`: `title`, `createdBy`, `due`, `done`, `doneBy`, `doneAt`
 - `couples/{coupleId}/ideas/{id}`: `title`, `category` (`Essen` | `Ausflug` | `Aktivität`), `createdBy`, `likes` (UIDs), `doneAt`, `eventId`
 - `couples/{coupleId}/moods/{uid}`: aktueller Stand – `value` (0–100), `need` (Text, max. 40 Zeichen), `updatedAt`

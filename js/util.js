@@ -128,9 +128,32 @@ export function greeting(now = new Date()) {
   return 'Guten Abend';
 }
 
-/** Liegt der Tag (ISO) innerhalb des Termins? */
+/** Findet der Termin an diesem Tag (ISO) statt? Berücksichtigt wöchentliche Wiederholung. */
 export function eventCovers(ev, iso) {
+  if (ev.repeat) {
+    if (iso < ev.start || (ev.repeat.until && iso > ev.repeat.until)) return false;
+    if (ev.skip?.includes(iso)) return false;
+    return ev.repeat.weekdays.includes(weekdayIndex(parseISO(iso)));
+  }
   return ev.start <= iso && (ev.end || ev.start) >= iso;
+}
+
+/** „Jeden Di & Do", „Jeden Montag", „Werktags", „Jeden Tag" */
+export function repeatLabel(repeat) {
+  const days = [...repeat.weekdays].sort((a, b) => a - b);
+  if (days.length === 7) return 'Jeden Tag';
+  if (days.join() === '0,1,2,3,4') return 'Werktags';
+  if (days.length === 1) return `Jeden ${WEEKDAYS_LONG[days[0]]}`;
+  const names = days.map((d) => WEEKDAYS_SHORT[d]);
+  return `Jeden ${names.slice(0, -1).join(', ')} & ${names.at(-1)}`;
+}
+
+/** Kalenderwoche nach ISO 8601 */
+export function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t - yearStart) / 86400000 + 1) / 7);
 }
 
 export function isShared(ev) {
