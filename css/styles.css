@@ -345,6 +345,8 @@ textarea.input { resize: vertical; min-height: 72px; }
 /* ---------- Start: Stimmung ---------- */
 
 .mood-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mood-pair--solo { grid-template-columns: 1fr; }
+.invite-card { display: flex; flex-direction: column; gap: 12px; }
 .mood-card {
   display: flex; flex-direction: column; gap: 10px;
   padding: 14px;

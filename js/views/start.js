@@ -3,7 +3,7 @@
 import * as db from '../data.js';
 import { esc, fmtDate, fmtNumber, greeting, moodWord, relTime, together, todayISO, isShared } from '../util.js';
 import { icon, avatar, face, mouthPath, openSheet, toast } from '../ui.js';
-import { eventRow } from './common.js';
+import { eventRow, inviteBlock, bindInvite } from './common.js';
 
 const NEEDS = ['Brauch Ruhe', 'Brauch eine Umarmung', 'Lust was zu unternehmen'];
 
@@ -77,7 +77,7 @@ export function renderStart(root) {
   const partner = () => couple?.members.find((u) => u !== me);
 
   function renderHeader() {
-    $('avatars').innerHTML = avatar(name(partner()), 'partner') + avatar(name(me), 'me');
+    $('avatars').innerHTML = (partner() ? avatar(name(partner()), 'partner') : '') + avatar(name(me), 'me');
   }
 
   function renderTogether() {
@@ -128,7 +128,19 @@ export function renderStart(root) {
 
   function renderMoods() {
     if (!couple || !moods) return;
-    $('moods').innerHTML = moodCard(partner(), name(partner())) + moodCard(me, 'Du');
+    const solo = !partner();
+    $('moods').classList.toggle('mood-pair--solo', solo);
+    $('moods').innerHTML = solo ? inviteCard() + moodCard(me, 'Du') : moodCard(partner(), name(partner())) + moodCard(me, 'Du');
+  }
+
+  // Solange noch niemand mit dem Code beigetreten ist
+  function inviteCard() {
+    return `
+      <article class="card code-card invite-card">
+        <h3 class="card-title">Noch allein hier</h3>
+        <p class="muted small">Schick diesen Code an die andere Person. Sie legt ein eigenes Konto an und gibt ihn unter „Ich habe einen Code“ ein.</p>
+        ${inviteBlock(db.formatCode(couple.inviteCode))}
+      </article>`;
   }
 
   function renderNeeds() {
@@ -226,18 +238,31 @@ export function renderStart(root) {
 
   function openAccountSheet() {
     const user = db.getCurrentUser();
+    const solo = !partner();
     openSheet({
       title: 'Euer Konto',
       body: `
         <dl class="facts" style="margin-bottom:16px">
           <div class="fact"><dt>Du</dt><dd>${esc(name(me))}</dd></div>
-          <div class="fact"><dt>Gekoppelt mit</dt><dd>${esc(name(partner()))}</dd></div>
+          <div class="fact"><dt>Gekoppelt mit</dt><dd>${solo ? '<span class="muted">noch niemand</span>' : esc(name(partner()))}</dd></div>
           <div class="fact"><dt>E-Mail</dt><dd class="small">${esc(user.email)}</dd></div>
         </dl>
+        ${solo ? `<div class="code-card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">${inviteBlock(db.formatCode(couple.inviteCode))}</div>` : ''}
         <div class="sheet-actions">
+          ${solo ? '<button type="button" class="btn btn--ghost btn--block" data-cancel>Paar löschen und selbst einen Code eingeben</button>' : ''}
           <button type="button" class="btn btn--ghost btn--block" data-logout>Abmelden</button>
         </div>`,
       onMount(dlg, close) {
+        bindInvite(dlg, () => db.formatCode(couple.inviteCode));
+        dlg.querySelector('[data-cancel]')?.addEventListener('click', async () => {
+          close();
+          try {
+            await db.cancelCouple();
+          } catch (err) {
+            console.error(err);
+            toast('Löschen hat nicht geklappt.');
+          }
+        });
         dlg.querySelector('[data-logout]').addEventListener('click', () => {
           close();
           db.signOut();
@@ -245,6 +270,8 @@ export function renderStart(root) {
       },
     });
   }
+
+  bindInvite($('moods'), () => db.formatCode(couple.inviteCode));
 
   $('file').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];

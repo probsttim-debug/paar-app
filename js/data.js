@@ -126,7 +126,7 @@ function watchCoupleDoc(user, coupleId) {
       }
       const couple = snap.data();
       const ready = couple.members.length >= 2;
-      if (ready) ensureLocalData(user.uid, couple.members.find((u) => u !== user.uid));
+      ensureLocalData(user.uid, couple.members.find((u) => u !== user.uid) || PENDING_PARTNER);
       setSession({ status: ready ? 'ready' : 'waiting', coupleId, couple, error: null });
     },
     onListenError,
@@ -300,6 +300,9 @@ export async function cancelCouple() {
 
 let state = null;
 
+// Platzhalter-UID, solange die andere Person noch nicht beigetreten ist
+const PENDING_PARTNER = 'partner-pending';
+
 /** Lädt die lokalen Daten; passen sie nicht zum aktuellen Paar, neu mit Beispieldaten anlegen. */
 function ensureLocalData(me, partner) {
   if (state && state.owners?.[0] === me && state.owners?.[1] === partner) return;
@@ -308,6 +311,13 @@ function ensureLocalData(me, partner) {
     if (raw) state = JSON.parse(raw);
   } catch {
     state = null;
+  }
+  if (state?.owners?.[0] === me && state.owners[1] === PENDING_PARTNER && partner !== PENDING_PARTNER) {
+    // Die andere Person ist beigetreten: bisherige Einträge behalten, Platzhalter ersetzen
+    state = JSON.parse(JSON.stringify(state).replaceAll(PENDING_PARTNER, partner));
+    persist();
+    ['events', 'todos', 'ideas', 'moods'].forEach((name) => emit(name, snapshot(name)));
+    return;
   }
   if (!state || state.owners?.[0] !== me || state.owners?.[1] !== partner) {
     state = createSampleData(me, partner);

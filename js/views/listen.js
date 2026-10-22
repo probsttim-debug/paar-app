@@ -87,7 +87,7 @@ export function renderListen(root, { sub }) {
               <span class="todo__title">${esc(t.title)}</span>
               ${meta ? `<small>${meta}</small>` : ''}
             </div>
-            ${avatar(couple.names[t.createdBy], clsOf(t.createdBy), 'sm')}
+            ${avatar(nameOf(t.createdBy), clsOf(t.createdBy), 'sm')}
             <span class="sr-only">Angelegt von ${esc(nameOf(t.createdBy))}</span>
           </li>`;
       }).join('')
@@ -99,7 +99,7 @@ export function renderListen(root, { sub }) {
   function ideaState(idea) {
     const ev = idea.eventId && events.find((e) => e.id === idea.eventId);
     const done = Boolean(idea.doneAt) || Boolean(ev && (ev.end || ev.start) < todayISO());
-    return { ev, done, both: couple.members.every((u) => idea.likes.includes(u)) };
+    return { ev, done, both: couple.members.length === 2 && couple.members.every((u) => idea.likes.includes(u)) };
   }
 
   function renderIdeas() {

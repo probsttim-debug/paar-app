@@ -1,13 +1,12 @@
 // Bildschirm „Koppeln": Paar anlegen (Code bekommen) oder mit Code beitreten.
-// Im Zustand „waiting" wird der eigene Code angezeigt, bis die Partnerin beigetreten ist.
+// Nach dem Anlegen geht es sofort in die App; der Code steht dort auf dem Start-Bildschirm.
 
 import * as db from '../data.js';
 import { esc, todayISO } from '../util.js';
-import { icon, openSheet, toast } from '../ui.js';
+import { icon } from '../ui.js';
 
-export function renderKoppeln(root, { session }) {
-  if (session.status === 'waiting') renderWaiting(root, session);
-  else renderChoose(root);
+export function renderKoppeln(root) {
+  renderChoose(root);
   // Zurück = abmelden, z. B. nach einem Tippfehler bei E-Mail oder Passwort
   root.querySelector('[data-el="back"]').addEventListener('click', () => db.signOut());
 }
@@ -21,7 +20,7 @@ function renderChoose(root) {
       <header>
         <p class="eyebrow">Fast geschafft</p>
         <h1 class="page-title">Jetzt koppeln</h1>
-        <p class="muted gate__lead">Eine von euch legt das Paar an und bekommt einen Code. Die andere Person tritt mit diesem Code bei.</p>
+        <p class="muted gate__lead">Eine von euch legt das Paar an und kann die App sofort nutzen. Die andere Person tritt später mit dem Code bei, den du dann auf dem Start-Bildschirm findest.</p>
       </header>
 
       <section class="card">
@@ -97,74 +96,4 @@ function renderChoose(root) {
   });
 
   root.querySelector('[data-el="logout"]').addEventListener('click', () => db.signOut());
-}
-
-function renderWaiting(root, session) {
-  const user = db.getCurrentUser();
-  const code = db.formatCode(session.couple.inviteCode);
-  const shareText = `Komm in unsere Paar-App! Melde dich an und gib diesen Code ein: ${code}\n${location.origin}${location.pathname}`;
-
-  root.innerHTML = `
-    <div class="gate">
-      <button type="button" class="back-btn" data-el="back">${icon('left', 20)} Zurück zur Anmeldung</button>
-      <header>
-        <p class="eyebrow">Hallo ${esc(user.name)}</p>
-        <h1 class="page-title">Euer Einladungscode</h1>
-        <p class="muted gate__lead">Schick diesen Code an die andere Person. Sie legt ein eigenes Konto an und gibt ihn unter „Ich habe einen Code“ ein.</p>
-      </header>
-
-      <section class="card code-card">
-        <p class="code-display" aria-label="Code: ${esc(code.split('').join(' '))}">${esc(code)}</p>
-        <div class="code-card__actions">
-          ${navigator.share ? `<button type="button" class="btn btn--primary" data-el="share">Code teilen</button>` : ''}
-          <button type="button" class="btn ${navigator.share ? 'btn--ghost' : 'btn--primary'}" data-el="copy">Kopieren</button>
-        </div>
-        <p class="waiting" role="status"><span class="waiting__dot" aria-hidden="true"></span> Warte auf die andere Person … Es geht automatisch weiter.</p>
-      </section>
-
-      <p class="gate__foot">
-        <button type="button" class="btn-link" data-el="cancel">Doch lieber selbst einen Code eingeben</button><br>
-        Angemeldet als ${esc(user.email)} · <button type="button" class="btn-link" data-el="logout">Abmelden</button>
-      </p>
-    </div>`;
-
-  const $ = (name) => root.querySelector(`[data-el="${name}"]`);
-
-  $('share')?.addEventListener('click', () => {
-    navigator.share({ title: 'Paar-App', text: shareText }).catch(() => {});
-  });
-
-  $('copy').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      toast('Code kopiert');
-    } catch {
-      toast('Kopieren ging nicht. Bitte abschreiben.');
-    }
-  });
-
-  $('cancel').addEventListener('click', () => {
-    openSheet({
-      title: 'Paar wieder löschen?',
-      body: `
-        <p class="muted" style="margin-bottom:16px">Dein Code wird ungültig. Danach kannst du selbst einen Code eingeben oder neu anlegen.</p>
-        <div class="sheet-actions">
-          <button type="button" class="btn btn--primary btn--block" data-confirm>Ja, löschen</button>
-          <button type="button" class="btn btn--ghost btn--block" data-sheet-close>Abbrechen</button>
-        </div>`,
-      onMount(dlg, close) {
-        dlg.querySelector('[data-confirm]').addEventListener('click', async () => {
-          try {
-            await db.cancelCouple();
-          } catch (err) {
-            console.error(err);
-            toast('Löschen hat nicht geklappt.');
-          }
-          close();
-        });
-      },
-    });
-  });
-
-  $('logout').addEventListener('click', () => db.signOut());
 }

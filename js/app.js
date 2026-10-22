@@ -3,6 +3,7 @@
 
 import * as db from './data.js';
 import { esc } from './util.js';
+import { toast } from './ui.js';
 import { renderStart } from './views/start.js';
 import { renderKalender } from './views/kalender.js';
 import { renderListen } from './views/listen.js';
@@ -54,8 +55,8 @@ function showGate(session) {
   if (session.status === 'signedOut') {
     mount(renderAuth);
     document.title = 'Anmelden · Paar-App';
-  } else if (session.status === 'noCouple' || session.status === 'waiting') {
-    mount(renderKoppeln, { session });
+  } else if (session.status === 'noCouple') {
+    mount(renderKoppeln);
     document.title = 'Koppeln · Paar-App';
   } else if (session.status === 'error') {
     mount((root) => {
@@ -81,13 +82,23 @@ function showGate(session) {
   }
 }
 
+let lastStatus = null;
+
 db.onSessionChange((session) => {
+  // Die App läuft auch schon, solange die andere Person noch nicht beigetreten ist („waiting")
+  const inApp = session.status === 'ready' || session.status === 'waiting';
+  if (lastStatus === 'waiting' && session.status === 'ready') {
+    const partner = session.couple.members.find((u) => u !== session.user.uid);
+    toast(`${session.couple.names[partner] || 'Die andere Person'} ist jetzt dabei!`);
+  }
+  lastStatus = session.status;
+
   // Gleicher Zustand (z. B. nur ein Name geändert) → nichts neu aufbauen
-  const key = session.status === 'waiting' ? `waiting:${session.couple.inviteCode}` : session.status;
+  const key = inApp ? 'ready' : session.status;
   if (key === gateKey) return;
   gateKey = key;
 
-  if (session.status === 'ready') {
+  if (inApp) {
     appEl.classList.remove('is-gated');
     route();
   } else {

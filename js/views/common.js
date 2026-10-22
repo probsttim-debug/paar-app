@@ -1,7 +1,37 @@
 // Bausteine, die mehrere Bildschirme nutzen: Terminzeile und Formular für neue Einträge.
 
 import { esc, fmtRange, parseISO, weekdayIndex, WEEKDAYS_SHORT, todayISO, diffDays, today, inDays } from '../util.js';
-import { icon, openSheet } from '../ui.js';
+import { icon, openSheet, toast } from '../ui.js';
+
+/** Code anzeigen plus Teilen/Kopieren, z. B. „K7MP-Q3XR". */
+export function inviteBlock(code) {
+  return `
+    <p class="code-display" aria-label="Code: ${esc(code.split('').join(' '))}">${esc(code)}</p>
+    <div class="code-card__actions">
+      ${navigator.share ? `<button type="button" class="btn btn--primary" data-invite="share">Code teilen</button>` : ''}
+      <button type="button" class="btn ${navigator.share ? 'btn--ghost' : 'btn--primary'}" data-invite="copy">Kopieren</button>
+    </div>`;
+}
+
+/** Klicks auf [data-invite] innerhalb von container behandeln. */
+export function bindInvite(container, getCode) {
+  container.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-invite]');
+    if (!btn) return;
+    const code = getCode();
+    if (btn.dataset.invite === 'share') {
+      const text = `Komm in unsere Paar-App! Melde dich an und gib diesen Code ein: ${code}\n${location.origin}${location.pathname}`;
+      navigator.share({ title: 'Paar-App', text }).catch(() => {});
+    } else {
+      try {
+        await navigator.clipboard.writeText(code);
+        toast('Code kopiert');
+      } catch {
+        toast('Kopieren ging nicht. Bitte abschreiben.');
+      }
+    }
+  });
+}
 
 export const TYPE_LABEL = { date: 'Date', trip: 'Urlaub', other: 'Gemeinsam', busy: 'Verplant' };
 const TYPE_ICON = { date: 'heart', trip: 'plane', other: 'star', busy: 'clock' };
