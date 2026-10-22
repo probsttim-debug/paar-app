@@ -3,7 +3,7 @@
 // Google Fonts und Firebase-SDK: aus dem Cache, sobald einmal geladen.
 // Bei Änderungen an der Dateiliste VERSION erhöhen.
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `paar-app-${VERSION}`;
 const FONT_CACHE = 'paar-app-fonts';
 const LIB_CACHE = 'paar-app-libs';
@@ -32,7 +32,9 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' – frisch vom Server, nicht aus dem Browser-Cache
+  const fresh = APP_SHELL.map((url) => new Request(url, { cache: 'reload' }));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(fresh)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -65,7 +67,9 @@ self.addEventListener('fetch', (event) => {
 async function networkFirst(request) {
   const cache = await caches.open(CACHE);
   try {
-    const response = await fetch(request);
+    // no-cache: beim Server nachfragen statt bis zu 10 Min. alte Dateien aus dem Browser-Cache
+    // zu nehmen (GitHub Pages erlaubt max-age=600). Unverändert kommt nur ein kurzes 304 zurück.
+    const response = await fetch(request, { cache: 'no-cache' });
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {

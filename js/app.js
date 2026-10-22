@@ -109,7 +109,22 @@ db.onSessionChange((session) => {
 window.addEventListener('hashchange', route);
 
 if ('serviceWorker' in navigator) {
+  // Neue Version automatisch laden: beim Zurückkehren in die App nach Updates schauen
+  // und neu laden, sobald ein neuer Service Worker übernimmt (nicht beim allerersten Start).
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Service Worker nicht registriert', err));
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+        });
+      })
+      .catch((err) => console.warn('Service Worker nicht registriert', err));
   });
 }
