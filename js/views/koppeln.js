@@ -6,8 +6,10 @@ import { esc, todayISO } from '../util.js';
 import { icon, openSheet, toast } from '../ui.js';
 
 export function renderKoppeln(root, { session }) {
-  if (session.status === 'waiting') return renderWaiting(root, session);
-  return renderChoose(root);
+  if (session.status === 'waiting') renderWaiting(root, session);
+  else renderChoose(root);
+  // Zurück = abmelden, z. B. nach einem Tippfehler bei E-Mail oder Passwort
+  root.querySelector('[data-el="back"]').addEventListener('click', () => db.signOut());
 }
 
 function renderChoose(root) {
@@ -15,6 +17,7 @@ function renderChoose(root) {
 
   root.innerHTML = `
     <div class="gate">
+      <button type="button" class="back-btn" data-el="back">${icon('left', 20)} Zurück zur Anmeldung</button>
       <header>
         <p class="eyebrow">Fast geschafft</p>
         <h1 class="page-title">Jetzt koppeln</h1>
@@ -103,6 +106,7 @@ function renderWaiting(root, session) {
 
   root.innerHTML = `
     <div class="gate">
+      <button type="button" class="back-btn" data-el="back">${icon('left', 20)} Zurück zur Anmeldung</button>
       <header>
         <p class="eyebrow">Hallo ${esc(user.name)}</p>
         <h1 class="page-title">Euer Einladungscode</h1>
