@@ -1,0 +1,77 @@
+// Service Worker: hält die App offline verfügbar.
+// Eigene Dateien: erst Netz (immer aktuell), bei fehlendem Netz aus dem Cache.
+// Google Fonts: aus dem Cache, sobald einmal geladen.
+// Bei Änderungen an der Dateiliste VERSION erhöhen.
+
+const VERSION = 'v1';
+const CACHE = `paar-app-${VERSION}`;
+const FONT_CACHE = 'paar-app-fonts';
+
+const APP_SHELL = [
+  './',
+  './index.html',
+  './manifest.json',
+  './css/styles.css',
+  './js/app.js',
+  './js/data.js',
+  './js/sample-data.js',
+  './js/ui.js',
+  './js/util.js',
+  './js/views/common.js',
+  './js/views/start.js',
+  './js/views/kalender.js',
+  './js/views/listen.js',
+  './js/views/statistik.js',
+  './icons/icon.svg',
+  './icons/icon-192.png',
+  './icons/apple-touch-icon.png',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONT_CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+
+  if (url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com') {
+    event.respondWith(cacheFirst(request, FONT_CACHE));
+    return;
+  }
+  if (url.origin === self.location.origin) {
+    event.respondWith(networkFirst(request));
+  }
+});
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch {
+    const cached = await cache.match(request, { ignoreSearch: true });
+    if (cached) return cached;
+    if (request.mode === 'navigate') return cache.match('./index.html');
+    throw new Error('Offline und nicht im Cache');
+  }
+}
+
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok || response.type === 'opaque') cache.put(request, response.clone());
+  return response;
+}
