@@ -2,7 +2,7 @@
 //
 // Stand Schritt 2:
 //   - Anmeldung (Firebase Auth) und das Paar (users/{uid}, couples/{coupleId}, invites/{code}) laufen über Firebase.
-//   - Kalender, Listen, Stimmung und Foto liegen noch im localStorage (Beispieldaten)
+//   - Kalender, Listen, Stimmung und Foto liegen noch im localStorage
 //     und werden in den nächsten Schritten gegen Firestore getauscht.
 // Die Schnittstelle ist Firestore-ähnlich:
 //   - watch…(callback) liefert sofort und bei jeder Änderung den aktuellen Stand
@@ -23,7 +23,6 @@ import {
   serverTimestamp, arrayUnion, deleteField,
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 import { auth, firestore } from './firebase.js';
-import { createSampleData } from './sample-data.js';
 import { todayISO } from './util.js';
 
 const KEY = 'paar-app:v1';
@@ -295,7 +294,7 @@ export async function cancelCouple() {
 }
 
 // ======================================================================
-// Lokale Beispieldaten (Kalender, Listen, Stimmung) – bis Schritt 3–6
+// Lokale Daten (Kalender, Listen, Stimmung) – bis Schritt 3–6 noch im localStorage
 // ======================================================================
 
 let state = null;
@@ -303,7 +302,28 @@ let state = null;
 // Platzhalter-UID, solange die andere Person noch nicht beigetreten ist
 const PENDING_PARTNER = 'partner-pending';
 
-/** Lädt die lokalen Daten; passen sie nicht zum aktuellen Paar, neu mit Beispieldaten anlegen. */
+function emptyData(me, partner) {
+  return { owners: [me, partner], noSamples: true, events: [], todos: [], ideas: [], moods: {}, moodLog: {} };
+}
+
+/**
+ * Entfernt die Beispieldaten aus Schritt 1 (feste IDs wie e1, t3, i7) und behält alles,
+ * was selbst eingetragen wurde (IDs mit Zeitstempel). Stimmung startet neu.
+ */
+function removeSamples(s) {
+  const own = (item) => !/^[eti]\d+$/.test(item.id);
+  s.events = s.events.filter(own);
+  s.todos = s.todos.filter(own);
+  s.ideas = s.ideas.filter(own);
+  for (const ev of s.events) if (ev.ideaId && !s.ideas.some((i) => i.id === ev.ideaId)) delete ev.ideaId;
+  for (const idea of s.ideas) if (idea.eventId && !s.events.some((e) => e.id === idea.eventId)) delete idea.eventId;
+  s.moods = {};
+  s.moodLog = {};
+  s.noSamples = true;
+  return s;
+}
+
+/** Lädt die lokalen Daten; passen sie nicht zum aktuellen Paar, leer neu anlegen. */
 function ensureLocalData(me, partner) {
   if (state && state.owners?.[0] === me && state.owners?.[1] === partner) return;
   try {
@@ -311,6 +331,10 @@ function ensureLocalData(me, partner) {
     if (raw) state = JSON.parse(raw);
   } catch {
     state = null;
+  }
+  if (state && !state.noSamples) {
+    state = removeSamples(state);
+    persist();
   }
   if (state?.owners?.[0] === me && state.owners[1] === PENDING_PARTNER && partner !== PENDING_PARTNER) {
     // Die andere Person ist beigetreten: bisherige Einträge behalten, Platzhalter ersetzen
@@ -320,7 +344,7 @@ function ensureLocalData(me, partner) {
     return;
   }
   if (!state || state.owners?.[0] !== me || state.owners?.[1] !== partner) {
-    state = createSampleData(me, partner);
+    state = emptyData(me, partner);
     persist();
   }
 }

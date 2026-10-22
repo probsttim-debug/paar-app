@@ -103,9 +103,9 @@ export function openEventForm({ heading = 'Neuer Eintrag', preset = {}, onSave }
       </div>
       <div class="field-row">
         <label class="field"><span class="label">Uhrzeit</span><input class="input" type="time" name="time" value="${esc(p.time || '')}"></label>
-        <label class="field"><span class="label">Ort</span><input class="input" name="place" maxlength="60" autocomplete="off" value="${esc(p.place || '')}"></label>
+        <label class="field"><span class="label">Ort</span><input class="input" name="place" maxlength="60" autocomplete="off" placeholder="optional" value="${esc(p.place || '')}"></label>
       </div>
-      <label class="field"><span class="label">Notiz</span><textarea class="input" name="note" rows="2" maxlength="200">${esc(p.note || '')}</textarea></label>
+      <label class="field"><span class="label">Notiz</span><textarea class="input" name="note" rows="2" maxlength="200" placeholder="optional">${esc(p.note || '')}</textarea></label>
       <p class="form-error" role="alert" hidden></p>
       <button class="btn btn--primary btn--block" type="submit">Speichern</button>
     </form>`;

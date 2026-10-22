@@ -185,19 +185,35 @@ p.empty.card { padding: 18px; }
 }
 .icon-btn--primary { background: var(--berry); color: #fff; width: 48px; height: 48px; border-radius: var(--r-btn); }
 
+/* Alle Eingabefelder gleich hoch, gleich gefüllt, Text links – auch Datum/Uhrzeit auf dem iPhone */
 .input {
+  display: block;
   width: 100%;
-  min-height: 48px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
+  min-width: 0;
+  height: 48px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid #D9D3E0;
   border-radius: 14px;
-  background: var(--card);
+  background-color: var(--bg);
+  color: var(--text);
   font-size: 16px; /* verhindert Zoom auf dem iPhone */
   font-weight: 500;
+  line-height: 46px;
+  text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .input::placeholder { color: var(--muted); opacity: 1; }
-.input:focus { border-color: var(--berry); outline: none; box-shadow: 0 0 0 3px var(--berry-light); }
-textarea.input { resize: vertical; min-height: 72px; }
+.input:focus { border-color: var(--berry); background-color: var(--card); outline: none; box-shadow: 0 0 0 3px var(--berry-light); }
+textarea.input { height: auto; min-height: 84px; padding: 12px 14px; line-height: 1.45; resize: vertical; }
+
+/* Safari (iPhone) zentriert Datum/Uhrzeit und lässt leere Felder zusammenfallen */
+.input[type="date"],
+.input[type="time"] { position: relative; line-height: normal; display: flex; align-items: center; padding-right: 40px; }
+.input::-webkit-date-and-time-value { text-align: left; margin: 0; min-height: 1.4em; }
+.input::-webkit-datetime-edit { padding: 0; flex: 1; }
+.input::-webkit-calendar-picker-indicator { position: absolute; right: 14px; top: 50%; margin: 0; transform: translateY(-50%); opacity: 0.55; }
 .select {
   width: auto;
   appearance: none;
@@ -209,7 +225,8 @@ textarea.input { resize: vertical; min-height: 72px; }
 }
 
 .inline-form, .add-form { display: flex; gap: 8px; align-items: center; }
-.add-form--idea .input:first-child { flex: 1; min-width: 0; }
+.add-form .input { flex: 1; }
+.add-form .select { flex: 0 0 136px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -707,8 +724,9 @@ textarea.input { resize: vertical; min-height: 72px; }
 
 .form { display: flex; flex-direction: column; gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.label { font-size: 14px; font-weight: 700; color: var(--muted); padding: 0; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.label { font-size: 14px; font-weight: 700; color: var(--muted); padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Zwei Felder nebeneinander: gleiche Breite, Eingaben auf einer Linie */
+.field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; }
 .form-error { color: var(--berry); font-weight: 700; font-size: 15px; }
 
 .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

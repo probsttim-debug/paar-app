@@ -49,7 +49,7 @@ export function renderListen(root, { sub }) {
       $('panel').innerHTML = `
         <form class="add-form add-form--idea" data-el="idea-form">
           <label class="sr-only" for="idea-input">Neue Date-Idee</label>
-          <input class="input" id="idea-input" name="title" placeholder="Neue Date-Idee …" maxlength="80" autocomplete="off">
+          <input class="input" id="idea-input" name="title" placeholder="Neue Idee …" maxlength="80" autocomplete="off">
           <label class="sr-only" for="idea-cat">Kategorie</label>
           <select class="input select" id="idea-cat" name="category">
             ${CATEGORIES.map((c) => `<option>${c}</option>`).join('')}
@@ -135,7 +135,7 @@ export function renderListen(root, { sub }) {
     };
 
     $('ideas').innerHTML = `
-      ${open.length ? open.map(card).join('') : '<p class="empty card">Keine offenen Ideen in dieser Kategorie.</p>'}
+      ${open.length ? open.map(card).join('') : `<p class="empty card">${ideaFilter === 'Alle' ? 'Noch keine Date-Ideen. Schreib oben eure erste Idee rein.' : 'Keine offenen Ideen in dieser Kategorie.'}</p>`}
       ${done.length ? `
         <h2 class="section-title">Schon gemacht</h2>
         <ul class="list card">

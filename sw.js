@@ -3,7 +3,7 @@
 // Google Fonts und Firebase-SDK: aus dem Cache, sobald einmal geladen.
 // Bei Änderungen an der Dateiliste VERSION erhöhen.
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `paar-app-${VERSION}`;
 const FONT_CACHE = 'paar-app-fonts';
 const LIB_CACHE = 'paar-app-libs';
@@ -17,7 +17,6 @@ const APP_SHELL = [
   './js/data.js',
   './js/firebase.js',
   './js/firebase-config.js',
-  './js/sample-data.js',
   './js/ui.js',
   './js/util.js',
   './js/views/auth.js',
