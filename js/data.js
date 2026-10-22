@@ -1,7 +1,7 @@
 // Datenschicht: ALLE Lese- und Schreibzugriffe der App laufen über diese Datei.
 //
 // Stand Schritt 2:
-//   - Anmeldung (Firebase Auth) und das Paar (couples/{coupleId}, invites/{code}) laufen über Firebase.
+//   - Anmeldung (Firebase Auth) und das Paar (users/{uid}, couples/{coupleId}, invites/{code}) laufen über Firebase.
 //   - Kalender, Listen, Stimmung und Foto liegen noch im localStorage (Beispieldaten)
 //     und werden in den nächsten Schritten gegen Firestore getauscht.
 // Die Schnittstelle ist Firestore-ähnlich:
@@ -19,7 +19,7 @@ import {
   updateProfile,
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
 import {
-  collection, doc, query, where, limit, onSnapshot, getDoc, writeBatch,
+  collection, doc, onSnapshot, getDoc, writeBatch,
   serverTimestamp, arrayUnion, deleteField,
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 import { auth, firestore } from './firebase.js';
@@ -58,6 +58,7 @@ function subscribe(name, cb, current) {
  *   error     – Paar konnte nicht geladen werden
  */
 let session = { status: 'loading', user: null, coupleId: null, couple: null, error: null };
+let userUnsub = null;
 let coupleUnsub = null;
 
 function setSession(next) {
@@ -72,39 +73,65 @@ function coupleSnapshot() {
   return { id: session.coupleId, members: [...c.members], names: { ...c.names }, startDate: c.startDate, inviteCode: c.inviteCode };
 }
 
-onAuthStateChanged(auth, (user) => {
+function onListenError(error) {
+  if (!auth.currentUser) return; // Abmeldung beendet die Listener
+  console.error(error);
+  setSession({ status: 'error', error });
+}
+
+function stopCouple() {
   coupleUnsub?.();
   coupleUnsub = null;
+}
+
+// Zwei kleine Listener: users/{uid} sagt, zu welchem Paar ich gehöre,
+// couples/{coupleId} liefert das Paar selbst.
+onAuthStateChanged(auth, (user) => {
+  userUnsub?.();
+  userUnsub = null;
+  stopCouple();
   if (!user) {
     setSession({ status: 'signedOut', user: null, coupleId: null, couple: null, error: null });
     return;
   }
   setSession({ status: 'loading', user, coupleId: null, couple: null, error: null });
 
-  // Ein einziger Listener: das Paar, in dem ich Mitglied bin
-  const q = query(collection(firestore, 'couples'), where('members', 'array-contains', user.uid), limit(1));
-  coupleUnsub = onSnapshot(
-    q,
+  userUnsub = onSnapshot(
+    doc(firestore, 'users', user.uid),
     (snap) => {
-      if (snap.empty) {
+      const coupleId = snap.exists() ? snap.data().coupleId : null;
+      if (!coupleId) {
         // Leerer Offline-Cache heißt nicht „kein Paar" – auf den Server warten
         if (snap.metadata.fromCache) return;
-        setSession({ status: 'noCouple', coupleId: null, couple: null });
+        stopCouple();
+        setSession({ status: 'noCouple', coupleId: null, couple: null, error: null });
         return;
       }
-      const d = snap.docs[0];
-      const couple = d.data();
-      const ready = couple.members.length >= 2;
-      if (ready) ensureLocalData(user.uid, couple.members.find((u) => u !== user.uid));
-      setSession({ status: ready ? 'ready' : 'waiting', coupleId: d.id, couple, error: null });
+      if (coupleId === session.coupleId && coupleUnsub) return;
+      stopCouple();
+      watchCoupleDoc(user, coupleId);
     },
-    (error) => {
-      if (!auth.currentUser) return; // Abmeldung beendet den Listener
-      console.error(error);
-      setSession({ status: 'error', error });
-    },
+    onListenError,
   );
 });
+
+function watchCoupleDoc(user, coupleId) {
+  coupleUnsub = onSnapshot(
+    doc(firestore, 'couples', coupleId),
+    (snap) => {
+      if (!snap.exists()) {
+        if (snap.metadata.fromCache) return;
+        setSession({ status: 'noCouple', coupleId: null, couple: null, error: null });
+        return;
+      }
+      const couple = snap.data();
+      const ready = couple.members.length >= 2;
+      if (ready) ensureLocalData(user.uid, couple.members.find((u) => u !== user.uid));
+      setSession({ status: ready ? 'ready' : 'waiting', coupleId, couple, error: null });
+    },
+    onListenError,
+  );
+}
 
 /** Benachrichtigt bei jeder Änderung von Anmeldung oder Paar. */
 export function onSessionChange(cb) {
@@ -212,11 +239,12 @@ export async function createCouple({ name, startDate }) {
     inviteCode: code,
   });
   batch.set(doc(firestore, 'invites', code), { coupleId: coupleRef.id, createdBy: uid, createdAt: serverTimestamp() });
+  batch.set(doc(firestore, 'users', uid), { coupleId: coupleRef.id });
   try {
     await batch.commit();
   } catch (err) {
     console.error(err);
-    throw new Error('Das Paar konnte nicht angelegt werden. Bist du online?');
+    throw new Error(`Das Paar konnte nicht angelegt werden. Bist du online? (Fehlercode: ${err.code || 'unbekannt'})`);
   }
 }
 
@@ -232,7 +260,7 @@ export async function joinCouple({ name, code: rawCode }) {
     invite = await getDoc(doc(firestore, 'invites', code));
   } catch (err) {
     console.error(err);
-    throw new Error('Der Code konnte nicht geprüft werden. Bist du online?');
+    throw new Error(`Der Code konnte nicht geprüft werden. Bist du online? (Fehlercode: ${err.code || 'unbekannt'})`);
   }
   if (!invite.exists()) throw new Error('Diesen Code gibt es nicht (mehr). Prüf ihn bitte noch mal.');
   const { coupleId, createdBy } = invite.data();
@@ -246,11 +274,12 @@ export async function joinCouple({ name, code: rawCode }) {
     inviteCode: deleteField(),
   });
   batch.delete(doc(firestore, 'invites', code));
+  batch.set(doc(firestore, 'users', uid), { coupleId });
   try {
     await batch.commit();
   } catch (err) {
     console.error(err);
-    throw new Error('Beitreten hat nicht geklappt. Vielleicht ist das Paar schon voll?');
+    throw new Error(`Beitreten hat nicht geklappt. Vielleicht ist das Paar schon voll? (Fehlercode: ${err.code || 'unbekannt'})`);
   }
 }
 
@@ -261,6 +290,7 @@ export async function cancelCouple() {
   const batch = writeBatch(firestore);
   if (couple.inviteCode) batch.delete(doc(firestore, 'invites', couple.inviteCode));
   batch.delete(doc(firestore, 'couples', coupleId));
+  batch.delete(doc(firestore, 'users', session.user.uid));
   await batch.commit();
 }
 

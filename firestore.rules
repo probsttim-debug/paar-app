@@ -27,6 +27,18 @@ service cloud.firestore {
       return d is string && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
 
+    // Pro Person: zu welchem Paar sie gehört. Nur die Person selbst darf es lesen.
+    // Schreiben nur, wenn sie danach wirklich Mitglied dieses Paars ist.
+    match /users/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['coupleId'])
+        && request.resource.data.coupleId is string
+        && request.auth.uid in getAfter(coupleDoc(request.resource.data.coupleId)).data.members;
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
     match /couples/{coupleId} {
       // Nur die beiden Mitglieder dürfen ihr Paar lesen
       allow read: if signedIn() && request.auth.uid in resource.data.members;
