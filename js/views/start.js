@@ -3,7 +3,8 @@
 import * as db from '../data.js';
 import { esc, fmtDate, fmtNumber, greeting, moodWord, relTime, together, todayISO, isShared } from '../util.js';
 import { icon, avatar, face, mouthPath, openSheet, toast } from '../ui.js';
-import { eventRow, inviteBlock, bindInvite } from './common.js';
+import { eventRow, inviteBlock, bindInvite, genderPicker } from './common.js';
+import { partnerWord } from '../theme.js';
 
 const NEEDS = ['Brauch Ruhe', 'Brauch eine Umarmung', 'Lust was zu unternehmen'];
 
@@ -72,7 +73,7 @@ export function renderStart(root) {
   // ---------- Rendern ----------
 
   function name(uid) {
-    return couple?.names?.[uid] || (uid === me ? 'Du' : 'Partnerin');
+    return couple?.names?.[uid] || (uid === me ? 'Du' : partnerWord(couple, me));
   }
   const partner = () => couple?.members.find((u) => u !== me);
 
@@ -242,6 +243,10 @@ export function renderStart(root) {
     openSheet({
       title: 'Euer Konto',
       body: `
+        <div class="field" style="margin-bottom:12px">
+          <span class="label">Ich bin</span>
+          ${genderPicker(couple.genders?.[me])}
+        </div>
         <dl class="facts" style="margin-bottom:16px">
           <div class="fact"><dt>Du</dt><dd>${esc(name(me))}</dd></div>
           <div class="fact"><dt>Gekoppelt mit</dt><dd>${solo ? '<span class="muted">noch niemand</span>' : esc(name(partner()))}</dd></div>
@@ -254,6 +259,17 @@ export function renderStart(root) {
         </div>`,
       onMount(dlg, close) {
         bindInvite(dlg, () => db.formatCode(couple.inviteCode));
+        dlg.querySelector('.gender-seg').addEventListener('click', async (e) => {
+          const btn = e.target.closest('[data-gender]');
+          if (!btn) return;
+          dlg.querySelectorAll('[data-gender]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+          try {
+            await db.setGender(btn.dataset.gender);
+            toast('Gespeichert');
+          } catch (err) {
+            toast(err.message);
+          }
+        });
         dlg.querySelector('[data-cancel]')?.addEventListener('click', async () => {
           close();
           try {

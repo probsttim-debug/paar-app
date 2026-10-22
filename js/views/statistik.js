@@ -6,6 +6,7 @@ import {
   WEEKDAYS_SHORT, WEEKDAYS_LONG, eventLength, isShared,
 } from '../util.js';
 import { icon } from '../ui.js';
+import { partnerWord } from '../theme.js';
 
 export function renderStatistik(root) {
   const me = db.getCurrentUser().uid;
@@ -40,7 +41,7 @@ export function renderStatistik(root) {
 
   const $ = (name) => root.querySelector(`[data-el="${name}"]`);
   const partner = () => couple?.members.find((u) => u !== me);
-  const partnerName = () => couple?.names?.[partner()] || 'Partnerin';
+  const partnerName = () => couple?.names?.[partner()] || partnerWord(couple, me);
 
   function inRange(iso) {
     return range === 'gesamt' || iso.slice(0, 4) === String(today().getFullYear());

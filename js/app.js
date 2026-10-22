@@ -4,6 +4,7 @@
 import * as db from './data.js';
 import { esc } from './util.js';
 import { toast } from './ui.js';
+import { applyPersonColors } from './theme.js';
 import { renderStart } from './views/start.js';
 import { renderKalender } from './views/kalender.js';
 import { renderListen } from './views/listen.js';
@@ -81,6 +82,9 @@ function showGate(session) {
     });
   }
 }
+
+// Personenfarben (Mann = Blau, Frau = Pink) bei jeder Änderung am Paar setzen
+db.watchCouple((couple) => applyPersonColors(couple, db.getCurrentUser()?.uid));
 
 let lastStatus = null;
 

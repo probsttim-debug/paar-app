@@ -3,6 +3,7 @@
 import * as db from '../data.js';
 import { esc, fmtShort, relTime, todayISO, toISO } from '../util.js';
 import { icon, avatar, toast } from '../ui.js';
+import { partnerWord } from '../theme.js';
 import { openEventForm } from './common.js';
 
 const CATEGORIES = ['Essen', 'Ausflug', 'Aktivität'];
@@ -28,7 +29,7 @@ export function renderListen(root, { sub }) {
     <div class="panel" data-el="panel"></div>`;
 
   const $ = (name) => root.querySelector(`[data-el="${name}"]`);
-  const nameOf = (uid) => (uid === me ? 'Du' : couple?.names?.[uid] || 'Partnerin');
+  const nameOf = (uid) => (uid === me ? 'Du' : couple?.names?.[uid] || partnerWord(couple, me));
   const clsOf = (uid) => (uid === me ? 'me' : 'partner');
 
   // ---------- Panels ----------
@@ -89,6 +90,7 @@ export function renderListen(root, { sub }) {
             </div>
             ${avatar(nameOf(t.createdBy), clsOf(t.createdBy), 'sm')}
             <span class="sr-only">Angelegt von ${esc(nameOf(t.createdBy))}</span>
+            ${t.done ? `<button type="button" class="icon-btn icon-btn--ghost" data-delete-todo="${t.id}" aria-label="${esc(t.title)} löschen">${icon('trash', 20)}</button>` : ''}
           </li>`;
       }).join('')
       : `<li class="empty">${todoFilter === 'open' ? 'Alles erledigt. Stark!' : 'Noch nichts erledigt.'}</li>`;
@@ -174,7 +176,7 @@ export function renderListen(root, { sub }) {
   root.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
-    const { tab: newTab, filter, toggle, cat, like, plan } = btn.dataset;
+    const { tab: newTab, filter, toggle, cat, like, plan, deleteTodo } = btn.dataset;
     if (newTab && newTab !== tab) {
       tab = newTab;
       history.replaceState(null, '', tab === 'ideen' ? '#/listen/ideen' : '#/listen');
@@ -182,6 +184,9 @@ export function renderListen(root, { sub }) {
     } else if (filter) {
       todoFilter = filter;
       renderTodos();
+    } else if (deleteTodo) {
+      db.deleteTodo(deleteTodo);
+      toast('Gelöscht');
     } else if (toggle) {
       const todo = todos.find((t) => t.id === toggle);
       db.setTodoDone(toggle, !todo.done);

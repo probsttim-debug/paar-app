@@ -19,7 +19,7 @@ import {
   updateProfile,
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
 import {
-  collection, doc, onSnapshot, getDoc, writeBatch,
+  collection, doc, onSnapshot, getDoc, writeBatch, updateDoc,
   serverTimestamp, arrayUnion, deleteField,
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 import { auth, firestore } from './firebase.js';
@@ -69,7 +69,14 @@ function setSession(next) {
 function coupleSnapshot() {
   if (!session.couple) return undefined;
   const c = session.couple;
-  return { id: session.coupleId, members: [...c.members], names: { ...c.names }, startDate: c.startDate, inviteCode: c.inviteCode };
+  return {
+    id: session.coupleId,
+    members: [...c.members],
+    names: { ...c.names },
+    genders: { ...(c.genders || {}) },
+    startDate: c.startDate,
+    inviteCode: c.inviteCode,
+  };
 }
 
 function onListenError(error) {
@@ -213,6 +220,23 @@ export function formatCode(code) {
   return code ? `${code.slice(0, 4)}-${code.slice(4)}` : '';
 }
 
+function checkGender(gender) {
+  if (gender !== 'm' && gender !== 'w') throw new Error('Bitte wähle, ob du Mann oder Frau bist.');
+  return gender;
+}
+
+/** Eigenes Geschlecht ändern: 'm' (Mann, Blau) oder 'w' (Frau, Pink). */
+export async function setGender(gender) {
+  const uid = auth.currentUser.uid;
+  checkGender(gender);
+  try {
+    await updateDoc(doc(firestore, 'couples', session.coupleId), { [`genders.${uid}`]: gender });
+  } catch (err) {
+    console.error(err);
+    throw new Error(`Speichern hat nicht geklappt. (Fehlercode: ${err.code || 'unbekannt'})`);
+  }
+}
+
 async function saveName(name) {
   const clean = String(name || '').trim().slice(0, 30);
   if (!clean) throw new Error('Bitte gib deinen Namen ein.');
@@ -221,8 +245,9 @@ async function saveName(name) {
 }
 
 /** Person A: legt das Paar an und bekommt einen Einladungscode. */
-export async function createCouple({ name, startDate }) {
+export async function createCouple({ name, gender, startDate }) {
   const uid = auth.currentUser.uid;
+  checkGender(gender);
   const myName = await saveName(name);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || '')) throw new Error('Bitte wähle das Datum, seit dem ihr zusammen seid.');
   if (startDate > todayISO()) throw new Error('Das Datum darf nicht in der Zukunft liegen.');
@@ -233,6 +258,7 @@ export async function createCouple({ name, startDate }) {
   batch.set(coupleRef, {
     members: [uid],
     names: { [uid]: myName },
+    genders: { [uid]: gender },
     startDate,
     createdAt: serverTimestamp(),
     inviteCode: code,
@@ -248,8 +274,9 @@ export async function createCouple({ name, startDate }) {
 }
 
 /** Person B: tritt mit dem Code bei. Danach ist das Paar voll. */
-export async function joinCouple({ name, code: rawCode }) {
+export async function joinCouple({ name, gender, code: rawCode }) {
   const uid = auth.currentUser.uid;
+  checkGender(gender);
   const code = normalizeCode(rawCode);
   if (code.length !== 8) throw new Error('Der Code hat 8 Zeichen, zum Beispiel ABCD-EFGH.');
   const myName = await saveName(name);
@@ -269,6 +296,7 @@ export async function joinCouple({ name, code: rawCode }) {
   batch.update(doc(firestore, 'couples', coupleId), {
     members: arrayUnion(uid),
     [`names.${uid}`]: myName,
+    [`genders.${uid}`]: gender,
     joinedWith: code,
     inviteCode: deleteField(),
   });
@@ -490,6 +518,12 @@ export async function addTodo(title, due) {
   state.todos.push(todo);
   commit('todos');
   return todo.id;
+}
+
+/** To-do endgültig löschen (z. B. erledigte aufräumen). */
+export async function deleteTodo(id) {
+  state.todos = state.todos.filter((t) => t.id !== id);
+  commit('todos');
 }
 
 export async function setTodoDone(id, done) {

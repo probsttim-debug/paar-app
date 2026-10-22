@@ -9,6 +9,7 @@ import {
   repeatLabel, isoWeek,
 } from '../util.js';
 import { icon, avatar, openSheet, toast } from '../ui.js';
+import { partnerWord } from '../theme.js';
 import { eventRow, openEventForm, TYPE_LABEL, TYPE_ICON } from './common.js';
 
 export function renderKalender(root) {
@@ -73,7 +74,7 @@ export function renderKalender(root) {
   document.getElementById('app').append(fab);
 
   const partner = () => couple?.members.find((u) => u !== me);
-  const partnerName = () => couple?.names?.[partner()] || 'Partnerin';
+  const partnerName = () => couple?.names?.[partner()] || partnerWord(couple, me);
   const nameOf = (uid) => (uid === me ? 'Du' : partnerName());
   const personCls = (ev) => (isShared(ev) ? 'shared' : ev.owner === me ? 'me' : 'partner');
   const byTime = (a, b) => (a.time || '').localeCompare(b.time || '');

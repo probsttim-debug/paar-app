@@ -4,6 +4,7 @@
 import * as db from '../data.js';
 import { esc, todayISO } from '../util.js';
 import { icon } from '../ui.js';
+import { genderPicker } from './common.js';
 
 export function renderKoppeln(root) {
   renderChoose(root);
@@ -23,11 +24,15 @@ function renderChoose(root) {
         <p class="muted gate__lead">Eine von euch legt das Paar an und kann die App sofort nutzen. Die andere Person tritt später mit dem Code bei, den du dann auf dem Start-Bildschirm findest.</p>
       </header>
 
-      <section class="card">
+      <section class="card form">
         <label class="field">
           <span class="card-title">Wie heißt du?</span>
           <input class="input" name="name" maxlength="30" autocomplete="given-name" value="${esc(user.name)}" placeholder="Dein Vorname">
         </label>
+        <div class="field">
+          <span class="label">Ich bin</span>
+          ${genderPicker(null)}
+        </div>
       </section>
 
       <form class="card form" data-el="create" novalidate>
@@ -54,6 +59,13 @@ function renderChoose(root) {
     </div>`;
 
   const nameInput = root.querySelector('input[name="name"]');
+  let gender = null;
+  root.querySelector('.gender-seg').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-gender]');
+    if (!btn) return;
+    gender = btn.dataset.gender;
+    root.querySelectorAll('[data-gender]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  });
 
   function bind(formName, action) {
     const form = root.querySelector(`[data-el="${formName}"]`);
@@ -62,9 +74,9 @@ function renderChoose(root) {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       error.hidden = true;
-      if (!nameInput.value.trim()) {
-        nameInput.focus();
-        error.textContent = 'Bitte gib oben zuerst deinen Namen ein.';
+      if (!nameInput.value.trim() || !gender) {
+        if (!nameInput.value.trim()) nameInput.focus();
+        error.textContent = !nameInput.value.trim() ? 'Bitte gib oben zuerst deinen Namen ein.' : 'Bitte wähle oben, ob du Mann oder Frau bist.';
         error.hidden = false;
         return;
       }
@@ -86,8 +98,8 @@ function renderChoose(root) {
     });
   }
 
-  bind('create', (form) => db.createCouple({ name: nameInput.value, startDate: form.elements.startDate.value }));
-  bind('join', (form) => db.joinCouple({ name: nameInput.value, code: form.elements.code.value }));
+  bind('create', (form) => db.createCouple({ name: nameInput.value, gender, startDate: form.elements.startDate.value }));
+  bind('join', (form) => db.joinCouple({ name: nameInput.value, gender, code: form.elements.code.value }));
 
   // Code beim Tippen als ABCD-EFGH formatieren
   root.querySelector('input[name="code"]').addEventListener('input', (e) => {

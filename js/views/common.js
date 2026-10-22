@@ -33,6 +33,12 @@ export function bindInvite(container, getCode) {
   });
 }
 
+/** Auswahl Mann/Frau (bestimmt die eigene Farbe: Blau oder Pink). */
+export function genderPicker(current) {
+  const opt = (value, label) => `<button type="button" data-gender="${value}" aria-pressed="${current === value}"><span class="gender-dot gender-dot--${value}" aria-hidden="true"></span>${label}</button>`;
+  return `<div class="seg seg--compact gender-seg" role="group" aria-label="Ich bin">${opt('m', 'Mann')}${opt('w', 'Frau')}</div>`;
+}
+
 export const TYPE_LABEL = { date: 'Date', trip: 'Urlaub', other: 'Gemeinsam', busy: 'Verplant' };
 export const TYPE_ICON = { date: 'heart', trip: 'plane', other: 'star', busy: 'clock' };
 

@@ -16,7 +16,7 @@ Private Web-App für zwei Personen (mich und meine Freundin): gemeinsamer Kalend
 ## Datenmodell (Vorschlag)
 
 - `users/{uid}`: `coupleId` – zu welchem Paar die Person gehört (nur für sie selbst lesbar)
-- `couples/{coupleId}`: `members` (2 UIDs), `names`, `startDate` (Beginn der Beziehung), `createdAt`
+- `couples/{coupleId}`: `members` (2 UIDs), `names`, `genders` (je UID `m` = Mann/Blau oder `w` = Frau/Pink), `startDate` (Beginn der Beziehung), `createdAt`
 - `couples/{coupleId}/meta/photo`: `dataUrl` (Hintergrundbild, siehe unten), `updatedAt`
 - `couples/{coupleId}/events/{id}`: `type` (`date` | `trip` | `other` | `busy`), `title`, `start`, `end`, `time`, `place`, `note`, `owner` (nur bei `busy`: UID der verplanten Person), `ideaId` (optional), `repeat` (optional, nur bei `busy`: `{ weekdays: [0–6, 0 = Mo], until? }` – fester Termin jede Woche), `skip` (ausgelassene Tage einer Serie, `YYYY-MM-DD`)
 - `couples/{coupleId}/todos/{id}`: `title`, `createdBy`, `due`, `done`, `doneBy`, `doneAt`
