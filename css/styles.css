@@ -740,6 +740,8 @@ textarea.input { resize: vertical; min-height: 72px; }
   color: #fff;
 }
 .gate__lead { margin-top: 8px; }
+.gate--center .btn { width: 100%; max-width: 320px; }
+.error-code { font-size: 14px; color: var(--muted); padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
 .gate__foot { text-align: center; font-size: 14px; color: var(--muted); line-height: 2; }
 
 .btn-link {

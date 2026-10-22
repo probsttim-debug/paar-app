@@ -2,6 +2,7 @@
 // (#/start, #/kalender, #/listen, #/listen/ideen, #/statistik) und Service Worker.
 
 import * as db from './data.js';
+import { esc } from './util.js';
 import { renderStart } from './views/start.js';
 import { renderKalender } from './views/kalender.js';
 import { renderListen } from './views/listen.js';
@@ -58,12 +59,20 @@ function showGate(session) {
     document.title = 'Koppeln · Paar-App';
   } else if (session.status === 'error') {
     mount((root) => {
+      const code = session.error?.code || session.error?.name || 'unbekannt';
+      const hint = code === 'permission-denied'
+        ? 'Firebase verweigert den Zugriff. Wahrscheinlich passen die Firestore-Regeln noch nicht.'
+        : 'Bist du online?';
       root.innerHTML = `
         <div class="gate gate--center">
           <h1 class="page-title">Hoppla</h1>
-          <p class="muted">Eure Daten konnten nicht geladen werden. Bist du online?</p>
-          <button type="button" class="btn btn--primary" onclick="location.reload()">Noch mal versuchen</button>
+          <p class="muted">Eure Daten konnten nicht geladen werden. ${hint}</p>
+          <p class="error-code">Fehlercode: <strong>${esc(code)}</strong></p>
+          <button type="button" class="btn btn--primary" data-el="retry">Noch mal versuchen</button>
+          <button type="button" class="btn btn--ghost" data-el="logout">Abmelden</button>
         </div>`;
+      root.querySelector('[data-el="retry"]').addEventListener('click', () => location.reload());
+      root.querySelector('[data-el="logout"]').addEventListener('click', () => db.signOut());
     });
   } else {
     mount((root) => {
