@@ -81,6 +81,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['names', 'genders', 'startDate'])
         && request.resource.data.names.keys().hasOnly(resource.data.members)
         && validGenders(request.resource.data.get('genders', {}), resource.data.members)
+        && request.resource.data.get('genders', {}).diff(resource.data.get('genders', {})).affectedKeys().hasOnly([request.auth.uid])
         && validDate(request.resource.data.startDate);
 
       // Ein noch nicht gekoppeltes Paar darf Person A wieder löschen
