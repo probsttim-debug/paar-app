@@ -30,6 +30,10 @@
 *::before,
 *::after { box-sizing: border-box; }
 
+/* Kein Zoom per Doppeltipp (z. B. beim schnellen Antippen von Knöpfen).
+   Scrollen und Zoomen mit zwei Fingern bleiben möglich. */
+* { touch-action: manipulation; }
+
 html, body { margin: 0; height: 100%; }
 [hidden] { display: none !important; }
 
