@@ -23,6 +23,8 @@ Private Web-App für zwei Personen (mich und meine Freundin): gemeinsamer Kalend
 - `couples/{coupleId}/moods/{uid}`: aktueller Stand – `value` (0–100), `need` (Text, max. 40 Zeichen), `updatedAt`
 - `couples/{coupleId}/moodLog/{yyyy-mm-dd_uid}`: ein Eintrag pro Person und Tag (letzter Wert des Tages) für die Statistik
 - **Koppeln**: Person A legt das Paar an und bekommt einen Einladungscode, Person B tritt mit dem Code bei. Danach ist das Paar voll (max. 2 Mitglieder).
+  - Umsetzung: `couples/{coupleId}` bekommt zusätzlich `inviteCode` (solange nur 1 Mitglied) bzw. `joinedWith` (Code, mit dem B beigetreten ist). `invites/{code}`: `coupleId`, `createdBy`, `createdAt` – lesbar nur per direktem Abruf (kein Auflisten), wird beim Beitritt gelöscht. Code: 8 Zeichen ohne verwechselbare Zeichen, angezeigt als `ABCD-EFGH`.
+  - Namen: jede Person trägt beim Koppeln ihren eigenen Namen ein (`names.{uid}`).
 - **Security Rules**: Lesen und Schreiben nur für die beiden `members` des jeweiligen Paars. Pflichtfelder und Längen in den Rules prüfen.
 
 ## Fotos ohne Cloud Storage

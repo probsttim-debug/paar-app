@@ -1,0 +1,94 @@
+rules_version = '2';
+
+// Security Rules der Paar-App (Stand Schritt 2: Login + Koppeln).
+// In der Firebase Console unter Firestore Database → Regeln einfügen und veröffentlichen.
+// Feldprüfungen für Termine, To-dos, Ideen und Stimmung folgen in Schritt 7.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function coupleDoc(coupleId) {
+      return /databases/$(database)/documents/couples/$(coupleId);
+    }
+
+    function isMember(coupleId) {
+      return signedIn() && request.auth.uid in get(coupleDoc(coupleId)).data.members;
+    }
+
+    function validName(n) {
+      return n is string && n.size() > 0 && n.size() <= 30;
+    }
+
+    function validDate(d) {
+      return d is string && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    match /couples/{coupleId} {
+      // Nur die beiden Mitglieder dürfen ihr Paar lesen
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+
+      // Person A legt das Paar an (zusammen mit dem Einladungscode)
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['members', 'names', 'startDate', 'createdAt', 'inviteCode'])
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.names.keys().hasOnly([request.auth.uid])
+        && validName(request.resource.data.names[request.auth.uid])
+        && validDate(request.resource.data.startDate)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.inviteCode is string
+        && request.resource.data.inviteCode.size() == 8;
+
+      // Person B tritt mit einem gültigen Code bei – danach ist das Paar voll (max. 2)
+      allow update: if signedIn()
+        && !(request.auth.uid in resource.data.members)
+        && resource.data.members.size() == 1
+        && request.resource.data.members == resource.data.members.concat([request.auth.uid])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'names', 'joinedWith', 'inviteCode'])
+        && request.resource.data.names.diff(resource.data.names).affectedKeys().hasOnly([request.auth.uid])
+        && validName(request.resource.data.names[request.auth.uid])
+        && !('inviteCode' in request.resource.data)
+        && request.resource.data.joinedWith is string
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.joinedWith))
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.joinedWith)).data.coupleId == coupleId;
+
+      // Mitglieder dürfen Namen und Startdatum ändern, aber nicht die Mitglieder
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.members
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['names', 'startDate'])
+        && request.resource.data.names.keys().hasOnly(resource.data.members)
+        && validDate(request.resource.data.startDate);
+
+      // Ein noch nicht gekoppeltes Paar darf Person A wieder löschen
+      allow delete: if signedIn() && resource.data.members == [request.auth.uid];
+
+      // Alle Unterdaten (Termine, To-dos, Ideen, Stimmung, Foto): nur für die Mitglieder.
+      // {sub} erzwingt mindestens eine Unter-Collection – {document=**} allein würde
+      // auch das Paar-Dokument selbst treffen und die Regeln oben aushebeln.
+      match /{sub}/{document=**} {
+        allow read, write: if isMember(coupleId);
+      }
+    }
+
+    match /invites/{code} {
+      // Wer den Code kennt, darf genau dieses Dokument lesen – Auflisten ist verboten
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['coupleId', 'createdBy', 'createdAt'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && getAfter(coupleDoc(request.resource.data.coupleId)).data.members == [request.auth.uid]
+        && getAfter(coupleDoc(request.resource.data.coupleId)).data.inviteCode == code;
+
+      // Löschen: Ersteller (Abbrechen) oder die beitretende Person (im selben Schritt wie der Beitritt)
+      allow delete: if signedIn()
+        && (resource.data.createdBy == request.auth.uid
+          || request.auth.uid in getAfter(coupleDoc(resource.data.coupleId)).data.members);
+    }
+  }
+}

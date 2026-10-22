@@ -1,25 +1,17 @@
-// Beispieldaten für Schritt 1 (noch ohne Firebase).
+// Beispieldaten für Kalender, Listen und Stimmung (noch lokal, bis Firestore angebunden ist).
+// Das Paar selbst (Namen, Startdatum) kommt seit Schritt 2 aus Firestore.
 // Alle Daten liegen relativ zum heutigen Tag, damit die App immer „lebendig" aussieht.
 // Aufbau entspricht dem Datenmodell aus der CLAUDE.md.
 
 import { today, addDays, toISO, startOfWeek } from './util.js';
 
-export const ME = 'u1';
-export const PARTNER = 'u2';
-
-export function createSampleData() {
+// ME und PARTNER sind die echten UIDs des Paars, damit „Du“ und Partnerin stimmen.
+export function createSampleData(ME, PARTNER) {
   const t = today();
   const ws = startOfWeek(t);
   const d = (n) => toISO(addDays(t, n));
   const w = (n) => toISO(addDays(ws, n));
   const ago = (days, hours = 0) => new Date(Date.now() - (days * 24 + hours) * 3600000).toISOString();
-
-  const couple = {
-    members: [ME, PARTNER],
-    names: { [ME]: 'Alex', [PARTNER]: 'Mia' },
-    startDate: toISO(new Date(t.getFullYear() - 2, t.getMonth() + 1, 14)),
-    createdAt: ago(30),
-  };
 
   const events = [
     // Diese Woche
@@ -49,7 +41,7 @@ export function createSampleData() {
   ];
 
   const todos = [
-    { id: 't1', title: 'Geschenk für Mias Schwester', createdBy: ME, due: d(5), done: false },
+    { id: 't1', title: 'Geburtstagsgeschenk für Oma', createdBy: ME, due: d(5), done: false },
     { id: 't2', title: 'Fahrradschloss kaufen', createdBy: PARTNER, done: false },
     { id: 't3', title: 'Unterkunft an der Ostsee buchen', createdBy: ME, due: d(10), done: false },
     { id: 't4', title: 'Termin für Winterreifen', createdBy: PARTNER, done: false },
@@ -89,5 +81,5 @@ export function createSampleData() {
     moodLog[`${date}_${PARTNER}`] = { date, uid: PARTNER, value: curvePartner[i] };
   }
 
-  return { couple, events, todos, ideas, moods, moodLog };
+  return { owners: [ME, PARTNER], events, todos, ideas, moods, moodLog };
 }

@@ -91,7 +91,7 @@ export function openEventForm({ heading = 'Neuer Eintrag', preset = {}, onSave }
         };
         if (data.type !== 'busy' && !data.title.trim()) return fail('Bitte gib einen Titel ein.');
         if (!data.start) return fail('Bitte wähle ein Datum.');
-        if (data.end && data.end < data.start) return fail('„Bis" darf nicht vor „Von" liegen.');
+        if (data.end && data.end < data.start) return fail('„Bis“ darf nicht vor „Von“ liegen.');
         if (data.type === 'busy' && !data.title.trim()) data.title = 'Verplant';
         await onSave(data);
         close();

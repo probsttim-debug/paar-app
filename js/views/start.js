@@ -22,7 +22,7 @@ export function renderStart(root) {
         <p class="eyebrow">${greeting()}</p>
         <h1 class="page-title">Ihr zwei</h1>
       </div>
-      <div class="avatar-pair" data-el="avatars"></div>
+      <button type="button" class="avatar-pair" data-el="avatars" data-action="account" aria-label="Konto und Abmelden"></button>
     </header>
 
     <section class="together" data-el="together" aria-label="Zusammen"></section>
@@ -221,7 +221,30 @@ export function renderStart(root) {
       db.setNeed(moods?.[me]?.need === need ? '' : need);
     }
     if (btn.dataset.action === 'photo') openPhotoSheet();
+    if (btn.dataset.action === 'account') openAccountSheet();
   });
+
+  function openAccountSheet() {
+    const user = db.getCurrentUser();
+    openSheet({
+      title: 'Euer Konto',
+      body: `
+        <dl class="facts" style="margin-bottom:16px">
+          <div class="fact"><dt>Du</dt><dd>${esc(name(me))}</dd></div>
+          <div class="fact"><dt>Gekoppelt mit</dt><dd>${esc(name(partner()))}</dd></div>
+          <div class="fact"><dt>E-Mail</dt><dd class="small">${esc(user.email)}</dd></div>
+        </dl>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn--ghost btn--block" data-logout>Abmelden</button>
+        </div>`,
+      onMount(dlg, close) {
+        dlg.querySelector('[data-logout]').addEventListener('click', () => {
+          close();
+          db.signOut();
+        });
+      },
+    });
+  }
 
   $('file').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];

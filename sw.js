@@ -1,11 +1,12 @@
 // Service Worker: hält die App offline verfügbar.
 // Eigene Dateien: erst Netz (immer aktuell), bei fehlendem Netz aus dem Cache.
-// Google Fonts: aus dem Cache, sobald einmal geladen.
+// Google Fonts und Firebase-SDK: aus dem Cache, sobald einmal geladen.
 // Bei Änderungen an der Dateiliste VERSION erhöhen.
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `paar-app-${VERSION}`;
 const FONT_CACHE = 'paar-app-fonts';
+const LIB_CACHE = 'paar-app-libs';
 
 const APP_SHELL = [
   './',
@@ -14,10 +15,14 @@ const APP_SHELL = [
   './css/styles.css',
   './js/app.js',
   './js/data.js',
+  './js/firebase.js',
+  './js/firebase-config.js',
   './js/sample-data.js',
   './js/ui.js',
   './js/util.js',
+  './js/views/auth.js',
   './js/views/common.js',
+  './js/views/koppeln.js',
   './js/views/start.js',
   './js/views/kalender.js',
   './js/views/listen.js',
@@ -34,7 +39,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONT_CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![CACHE, FONT_CACHE, LIB_CACHE].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -46,6 +51,11 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com') {
     event.respondWith(cacheFirst(request, FONT_CACHE));
+    return;
+  }
+  // Firebase-SDK: Adressen enthalten die Versionsnummer, ändern sich also nie
+  if (url.origin === 'https://www.gstatic.com' && url.pathname.startsWith('/firebasejs/')) {
+    event.respondWith(cacheFirst(request, LIB_CACHE));
     return;
   }
   if (url.origin === self.location.origin) {

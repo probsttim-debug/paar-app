@@ -1,70 +1,312 @@
 // Datenschicht: ALLE Lese- und Schreibzugriffe der App laufen über diese Datei.
 //
-// Schritt 1: Speicherung im localStorage mit Beispieldaten.
-// Später wird diese Datei gegen eine Firestore-Version mit identischer Schnittstelle
-// ausgetauscht. Deshalb ist die Schnittstelle bewusst Firestore-ähnlich:
+// Stand Schritt 2:
+//   - Anmeldung (Firebase Auth) und das Paar (couples/{coupleId}, invites/{code}) laufen über Firebase.
+//   - Kalender, Listen, Stimmung und Foto liegen noch im localStorage (Beispieldaten)
+//     und werden in den nächsten Schritten gegen Firestore getauscht.
+// Die Schnittstelle ist Firestore-ähnlich:
 //   - watch…(callback) liefert sofort und bei jeder Änderung den aktuellen Stand
 //     und gibt eine Funktion zum Abmelden zurück (wie onSnapshot).
-//   - Schreibfunktionen sind async (wie addDoc/updateDoc).
-//   - Das Foto liegt getrennt und wird nur bei Bedarf geladen (wie meta/photo).
-// Die Views importieren nur von hier und kennen localStorage nicht.
+//   - Schreibfunktionen sind async.
+// Die Views importieren nur von hier und kennen weder Firebase noch localStorage.
 
-import { createSampleData, ME } from './sample-data.js';
+import {
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut as fbSignOut,
+  updateProfile,
+} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
+import {
+  collection, doc, query, where, limit, onSnapshot, getDoc, writeBatch,
+  serverTimestamp, arrayUnion, deleteField,
+} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+import { auth, firestore } from './firebase.js';
+import { createSampleData } from './sample-data.js';
 import { todayISO } from './util.js';
 
 const KEY = 'paar-app:v1';
 const PHOTO_KEY = 'paar-app:v1:photo';
 
-let state = load();
 const listeners = new Map();
 
-function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // Kaputter oder fehlender Speicher: neu mit Beispieldaten anfangen
-  }
-  const fresh = createSampleData();
-  persist(fresh);
-  return fresh;
+function emit(name, value) {
+  const set = listeners.get(name);
+  if (set) for (const cb of [...set]) cb(value);
 }
 
-function persist(s) {
+function subscribe(name, cb, current) {
+  if (!listeners.has(name)) listeners.set(name, new Set());
+  const set = listeners.get(name);
+  set.add(cb);
+  queueMicrotask(() => set.has(cb) && current() !== undefined && cb(current()));
+  return () => set.delete(cb);
+}
+
+// ======================================================================
+// Anmeldung und Paar (Firebase)
+// ======================================================================
+
+/**
+ * Sitzungszustand:
+ *   loading   – wird geprüft
+ *   signedOut – nicht angemeldet
+ *   noCouple  – angemeldet, aber noch kein Paar
+ *   waiting   – Paar angelegt, die andere Person hat den Code noch nicht eingegeben
+ *   ready     – Paar komplett, App kann starten
+ *   error     – Paar konnte nicht geladen werden
+ */
+let session = { status: 'loading', user: null, coupleId: null, couple: null, error: null };
+let coupleUnsub = null;
+
+function setSession(next) {
+  session = { ...session, ...next };
+  emit('session', { ...session });
+  emit('couple', coupleSnapshot());
+}
+
+function coupleSnapshot() {
+  if (!session.couple) return undefined;
+  const c = session.couple;
+  return { id: session.coupleId, members: [...c.members], names: { ...c.names }, startDate: c.startDate, inviteCode: c.inviteCode };
+}
+
+onAuthStateChanged(auth, (user) => {
+  coupleUnsub?.();
+  coupleUnsub = null;
+  if (!user) {
+    setSession({ status: 'signedOut', user: null, coupleId: null, couple: null, error: null });
+    return;
+  }
+  setSession({ status: 'loading', user, coupleId: null, couple: null, error: null });
+
+  // Ein einziger Listener: das Paar, in dem ich Mitglied bin
+  const q = query(collection(firestore, 'couples'), where('members', 'array-contains', user.uid), limit(1));
+  coupleUnsub = onSnapshot(
+    q,
+    (snap) => {
+      if (snap.empty) {
+        // Leerer Offline-Cache heißt nicht „kein Paar" – auf den Server warten
+        if (snap.metadata.fromCache) return;
+        setSession({ status: 'noCouple', coupleId: null, couple: null });
+        return;
+      }
+      const d = snap.docs[0];
+      const couple = d.data();
+      const ready = couple.members.length >= 2;
+      if (ready) ensureLocalData(user.uid, couple.members.find((u) => u !== user.uid));
+      setSession({ status: ready ? 'ready' : 'waiting', coupleId: d.id, couple, error: null });
+    },
+    (error) => {
+      if (!auth.currentUser) return; // Abmeldung beendet den Listener
+      console.error(error);
+      setSession({ status: 'error', error });
+    },
+  );
+});
+
+/** Benachrichtigt bei jeder Änderung von Anmeldung oder Paar. */
+export function onSessionChange(cb) {
+  return subscribe('session', cb, () => ({ ...session }));
+}
+
+/** Der angemeldete Nutzer. */
+export function getCurrentUser() {
+  const u = session.user;
+  return u ? { uid: u.uid, email: u.email, name: u.displayName || '' } : null;
+}
+
+export function watchCouple(cb) {
+  return subscribe('couple', cb, coupleSnapshot);
+}
+
+export async function register(email, password) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    await createUserWithEmailAndPassword(auth, email.trim(), password);
+  } catch (err) {
+    throw new Error(authMessage(err));
+  }
+}
+
+export async function signIn(email, password) {
+  try {
+    await signInWithEmailAndPassword(auth, email.trim(), password);
+  } catch (err) {
+    throw new Error(authMessage(err));
+  }
+}
+
+export async function resetPassword(email) {
+  try {
+    await sendPasswordResetEmail(auth, email.trim());
+  } catch (err) {
+    throw new Error(authMessage(err));
+  }
+}
+
+export async function signOut() {
+  await fbSignOut(auth);
+}
+
+function authMessage(err) {
+  const messages = {
+    'auth/invalid-email': 'Diese E-Mail-Adresse sieht nicht richtig aus.',
+    'auth/missing-email': 'Bitte gib deine E-Mail-Adresse ein.',
+    'auth/missing-password': 'Bitte gib dein Passwort ein.',
+    'auth/invalid-credential': 'E-Mail oder Passwort stimmt nicht.',
+    'auth/wrong-password': 'E-Mail oder Passwort stimmt nicht.',
+    'auth/user-not-found': 'E-Mail oder Passwort stimmt nicht.',
+    'auth/email-already-in-use': 'Mit dieser E-Mail gibt es schon ein Konto. Melde dich an.',
+    'auth/weak-password': 'Das Passwort braucht mindestens 6 Zeichen.',
+    'auth/too-many-requests': 'Zu viele Versuche. Warte kurz und probier es dann noch mal.',
+    'auth/network-request-failed': 'Keine Verbindung. Bist du online?',
+    'auth/operation-not-allowed': 'Die Anmeldung per E-Mail ist in Firebase noch nicht eingeschaltet.',
+  };
+  console.warn(err);
+  return messages[err?.code] || 'Das hat nicht geklappt. Bitte versuch es noch mal.';
+}
+
+// ---------- Koppeln ----------
+
+// Ohne leicht verwechselbare Zeichen (0/O, 1/I/L)
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+function newInviteCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return [...bytes].map((b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+}
+
+/** „abcd-efgh" → „ABCDEFGH" */
+export function normalizeCode(input) {
+  return String(input || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** „ABCDEFGH" → „ABCD-EFGH" */
+export function formatCode(code) {
+  return code ? `${code.slice(0, 4)}-${code.slice(4)}` : '';
+}
+
+async function saveName(name) {
+  const clean = String(name || '').trim().slice(0, 30);
+  if (!clean) throw new Error('Bitte gib deinen Namen ein.');
+  if (auth.currentUser.displayName !== clean) await updateProfile(auth.currentUser, { displayName: clean });
+  return clean;
+}
+
+/** Person A: legt das Paar an und bekommt einen Einladungscode. */
+export async function createCouple({ name, startDate }) {
+  const uid = auth.currentUser.uid;
+  const myName = await saveName(name);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || '')) throw new Error('Bitte wähle das Datum, seit dem ihr zusammen seid.');
+  if (startDate > todayISO()) throw new Error('Das Datum darf nicht in der Zukunft liegen.');
+
+  const code = newInviteCode();
+  const coupleRef = doc(collection(firestore, 'couples'));
+  const batch = writeBatch(firestore);
+  batch.set(coupleRef, {
+    members: [uid],
+    names: { [uid]: myName },
+    startDate,
+    createdAt: serverTimestamp(),
+    inviteCode: code,
+  });
+  batch.set(doc(firestore, 'invites', code), { coupleId: coupleRef.id, createdBy: uid, createdAt: serverTimestamp() });
+  try {
+    await batch.commit();
+  } catch (err) {
+    console.error(err);
+    throw new Error('Das Paar konnte nicht angelegt werden. Bist du online?');
+  }
+}
+
+/** Person B: tritt mit dem Code bei. Danach ist das Paar voll. */
+export async function joinCouple({ name, code: rawCode }) {
+  const uid = auth.currentUser.uid;
+  const code = normalizeCode(rawCode);
+  if (code.length !== 8) throw new Error('Der Code hat 8 Zeichen, zum Beispiel ABCD-EFGH.');
+  const myName = await saveName(name);
+
+  let invite;
+  try {
+    invite = await getDoc(doc(firestore, 'invites', code));
+  } catch (err) {
+    console.error(err);
+    throw new Error('Der Code konnte nicht geprüft werden. Bist du online?');
+  }
+  if (!invite.exists()) throw new Error('Diesen Code gibt es nicht (mehr). Prüf ihn bitte noch mal.');
+  const { coupleId, createdBy } = invite.data();
+  if (createdBy === uid) throw new Error('Das ist dein eigener Code. Den gibst du der anderen Person.');
+
+  const batch = writeBatch(firestore);
+  batch.update(doc(firestore, 'couples', coupleId), {
+    members: arrayUnion(uid),
+    [`names.${uid}`]: myName,
+    joinedWith: code,
+    inviteCode: deleteField(),
+  });
+  batch.delete(doc(firestore, 'invites', code));
+  try {
+    await batch.commit();
+  } catch (err) {
+    console.error(err);
+    throw new Error('Beitreten hat nicht geklappt. Vielleicht ist das Paar schon voll?');
+  }
+}
+
+/** Person A: noch nicht gekoppeltes Paar wieder löschen (z. B. um selbst einem Code beizutreten). */
+export async function cancelCouple() {
+  const { coupleId, couple } = session;
+  if (!coupleId || couple.members.length !== 1) return;
+  const batch = writeBatch(firestore);
+  if (couple.inviteCode) batch.delete(doc(firestore, 'invites', couple.inviteCode));
+  batch.delete(doc(firestore, 'couples', coupleId));
+  await batch.commit();
+}
+
+// ======================================================================
+// Lokale Beispieldaten (Kalender, Listen, Stimmung) – bis Schritt 3–6
+// ======================================================================
+
+let state = null;
+
+/** Lädt die lokalen Daten; passen sie nicht zum aktuellen Paar, neu mit Beispieldaten anlegen. */
+function ensureLocalData(me, partner) {
+  if (state && state.owners?.[0] === me && state.owners?.[1] === partner) return;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) state = JSON.parse(raw);
+  } catch {
+    state = null;
+  }
+  if (!state || state.owners?.[0] !== me || state.owners?.[1] !== partner) {
+    state = createSampleData(me, partner);
+    persist();
+  }
+}
+
+function persist() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
   } catch (err) {
     console.warn('Speichern im localStorage fehlgeschlagen', err);
   }
 }
 
 function snapshot(name) {
-  switch (name) {
-    case 'events':
-      return clone(state.events).sort((a, b) => (a.start + (a.time || '')).localeCompare(b.start + (b.time || '')));
-    case 'todos':
-      return clone(state.todos);
-    case 'ideas':
-      return clone(state.ideas);
-    default:
-      return clone(state[name]);
-  }
+  if (!state) return undefined;
+  const value = clone(state[name]);
+  if (name === 'events') value.sort((a, b) => (a.start + (a.time || '')).localeCompare(b.start + (b.time || '')));
+  return value;
 }
 
 function watch(name, cb) {
-  if (!listeners.has(name)) listeners.set(name, new Set());
-  const set = listeners.get(name);
-  set.add(cb);
-  queueMicrotask(() => set.has(cb) && cb(snapshot(name)));
-  return () => set.delete(cb);
+  return subscribe(name, cb, () => snapshot(name));
 }
 
 function commit(...names) {
-  persist(state);
-  for (const name of names) {
-    const set = listeners.get(name);
-    if (set) for (const cb of [...set]) cb(snapshot(name));
-  }
+  persist();
+  for (const name of names) emit(name, snapshot(name));
 }
 
 function clone(v) {
@@ -76,17 +318,7 @@ function newId(prefix) {
 }
 
 const nowISO = () => new Date().toISOString();
-
-// ---------- Nutzer und Paar ----------
-
-/** Der angemeldete Nutzer. Später aus Firebase Auth. */
-export function getCurrentUser() {
-  return { uid: ME };
-}
-
-export function watchCouple(cb) {
-  return watch('couple', cb);
-}
+const myUid = () => session.user.uid;
 
 // ---------- Stimmung ----------
 
@@ -96,7 +328,7 @@ export function watchMoods(cb) {
 
 /** Setzt die eigene Stimmung (0–100) und schreibt den Tageswert ins Stimmungslog. */
 export async function setMood(value) {
-  const uid = getCurrentUser().uid;
+  const uid = myUid();
   const v = Math.max(0, Math.min(100, Math.round(value)));
   state.moods[uid] = { ...state.moods[uid], value: v, updatedAt: nowISO() };
   const date = todayISO();
@@ -106,7 +338,7 @@ export async function setMood(value) {
 
 /** Setzt das eigene Bedürfnis (max. 40 Zeichen); leerer Text entfernt es. */
 export async function setNeed(text) {
-  const uid = getCurrentUser().uid;
+  const uid = myUid();
   const need = String(text || '').trim().slice(0, 40);
   state.moods[uid] = { ...state.moods[uid], need, updatedAt: nowISO() };
   commit('moods');
@@ -126,7 +358,7 @@ export function watchEvents(cb) {
 }
 
 export async function addEvent(data) {
-  const uid = getCurrentUser().uid;
+  const uid = myUid();
   const ev = {
     id: newId('e'),
     type: data.type,
@@ -156,7 +388,7 @@ export async function addTodo(title, due) {
   const todo = {
     id: newId('t'),
     title: String(title).trim().slice(0, 120),
-    createdBy: getCurrentUser().uid,
+    createdBy: myUid(),
     createdAt: nowISO(),
     done: false,
   };
@@ -171,7 +403,7 @@ export async function setTodoDone(id, done) {
   if (!todo) return;
   todo.done = done;
   if (done) {
-    todo.doneBy = getCurrentUser().uid;
+    todo.doneBy = myUid();
     todo.doneAt = nowISO();
   } else {
     delete todo.doneBy;
@@ -191,7 +423,7 @@ export async function addIdea(title, category) {
     id: newId('i'),
     title: String(title).trim().slice(0, 80),
     category,
-    createdBy: getCurrentUser().uid,
+    createdBy: myUid(),
     createdAt: nowISO(),
     likes: [],
   };
@@ -201,7 +433,7 @@ export async function addIdea(title, category) {
 }
 
 export async function toggleIdeaLike(id) {
-  const uid = getCurrentUser().uid;
+  const uid = myUid();
   const idea = state.ideas.find((i) => i.id === id);
   if (!idea) return;
   idea.likes = idea.likes.includes(uid) ? idea.likes.filter((u) => u !== uid) : [...idea.likes, uid];
@@ -244,14 +476,4 @@ export async function removePhoto() {
 export function onPhotoChange(cb) {
   photoListeners.add(cb);
   return () => photoListeners.delete(cb);
-}
-
-// ---------- Entwicklung ----------
-
-/** Setzt alle Daten auf die Beispieldaten zurück (nur für Schritt 1). */
-export function resetSampleData() {
-  state = createSampleData();
-  persist(state);
-  localStorage.removeItem(PHOTO_KEY);
-  location.reload();
 }
